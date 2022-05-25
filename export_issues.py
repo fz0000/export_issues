@@ -49,7 +49,7 @@ def check_filter(filter_list: list = None, all_list: list = None, logic: int = L
     if not filter_list:
         return True  # speed up: always True if filter_list is None
     if logic == LOGIC.AND:
-        return filter_list <= all_list
+        return set(filter_list) <= set(all_list)
     if logic == LOGIC.OR:
         return [i for i in filter_list if i in all_list] > []
 
