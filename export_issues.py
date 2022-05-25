@@ -139,7 +139,10 @@ if __name__ == '__main__':
                 list_select = []
 
                 print('Retrieving issues......')
-                get_all_issues()
+                # submitted by user1, and has the label "label1" or "label1"
+                get_all_issues(required_labels=['by-user1'],
+                               labels=['label1', 'label2'],
+                               labels_logic=LOGIC.OR)
 
         print('====Completed!====')
         input('Press Enter to quit...')
