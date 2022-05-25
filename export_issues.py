@@ -35,7 +35,7 @@ def get_current_time():
 def check_remaining():
     remain_cnt = g.get_rate_limit().core.remaining
     print('remain: %d' % remain_cnt)
-    if remain_cnt < 500:  # todo: use param?
+    if remain_cnt < 50:  # todo: use param?
         reset_time = g.get_rate_limit().core.reset
         cur_time = get_current_time()
         print('wait until: %s' % reset_time.strftime('%Y-%m-%d %H:%M:%S UTC'))
@@ -70,7 +70,7 @@ def get_all_issues(state='all', milestone: str = None,
         print('Writing to issues.csv.....')
         for issue in issues:  # remain -1
             cnt += 1
-
+            print('getting issue %d\t %d/%d' % (issue.number, cnt, total))
             # if issue.pull_request: # remain -1
             #     print('skipping PR %d\t %d/%d' % (issue.number, cnt, total))
             #     print('check pr yes')
@@ -110,7 +110,6 @@ def get_all_issues(state='all', milestone: str = None,
             # if cnt % 20 == 0:  # check remaining every 20 issues.
             #     check_remaining()
 
-            print('getting issue %d\t %d/%d' % (issue.number, cnt, total))
             line = [issue.id,
                     issue.number,
                     issue.title,
