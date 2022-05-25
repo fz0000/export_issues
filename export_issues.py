@@ -55,6 +55,7 @@ def check_filter(filter_list: list = None, all_list: list = None, logic: int = L
 
 
 def get_all_issues(state='all', milestone: str = None,
+                   required_labels: list[str] = None,
                    labels: list[str] = None, labels_logic=LOGIC.AND,
                    assignees: list[str] = None, assignees_logic=LOGIC.AND):
     issue_list = []
@@ -83,6 +84,8 @@ def get_all_issues(state='all', milestone: str = None,
             tmp_an = []
             for l in issue.labels:
                 tmp_label.append(l.name)
+            if not check_filter(required_labels, tmp_label, LOGIC.AND):
+                continue
             if not check_filter(labels, tmp_label, labels_logic):
                 continue
 
