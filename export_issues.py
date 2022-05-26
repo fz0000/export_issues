@@ -1,16 +1,21 @@
 # -*- coding: utf-8 -*-
 
 import csv
+import os.path
 import platform
+import smtplib
 import sys
 import time
+from email import encoders
+from email.mime.base import MIMEBase
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
 import requests
 from github import Github
 
 if platform.python_version_tuple()[0] == '2':
     print('======Please use python 3.x======')
-    input('Press Enter to quit...')
     sys.exit(0)
 
 
@@ -32,10 +37,10 @@ def get_current_time():
     return time.strptime(github_time, '%a, %d %b %Y %H:%M:%S GMT')
 
 
-def check_remaining():
+def check_remaining(cnt=500):
     remain_cnt = g.get_rate_limit().core.remaining
     print('remain: %d' % remain_cnt)
-    if remain_cnt < 50:  # todo: use param?
+    if remain_cnt < cnt:
         reset_time = g.get_rate_limit().core.reset
         cur_time = get_current_time()
         print('wait until: %s' % reset_time.strftime('%Y-%m-%d %H:%M:%S UTC'))
@@ -60,24 +65,18 @@ def get_all_issues(state='all', milestone: str = None,
                    assignees: list[str] = None, assignees_logic=LOGIC.AND):
     issue_list = []
     issues = repo.get_issues(state=state)
-    with open('issues.csv', 'w', newline='', encoding='utf-8') as csv_file:
+    with open(os.path.join(os.path.dirname(__file__), "issues.csv"), 'w', newline='', encoding='utf-8') as csv_file:
         writer = csv.writer(csv_file)
         # todo: use friendly col name?
         writer.writerow(['id', 'number', 'title', 'labels', 'milestone', 'state', 'assignees', 'closed_at',
                          'created_at', 'last_modified', 'updated_at'])
         check_remaining()
-        total = issues.totalCount  # remain -1
         cnt = 0
         print('Writing to issues.csv.....')
         for issue in issues:  # remain -1
+            if cnt % 400 == 0:  # check remaining every 400 issues.
+                check_remaining()
             cnt += 1
-            print('getting issue %d\t %d/%d' % (issue.number, cnt, total))
-            # if issue.pull_request: # remain -1
-            #     print('skipping PR %d\t %d/%d' % (issue.number, cnt, total))
-            #     print('check pr yes')
-            #     check_remaining()
-            #     continue
-            # print('check pr no')
 
             # label
             tmp_label = []
@@ -99,19 +98,12 @@ def get_all_issues(state='all', milestone: str = None,
             if not check_filter(assignees, tmp_an, assignees_logic):
                 continue
 
-            # c_b = ''  # bad var name, but I'm too lazy...
-            # if issue.closed_by: # remain -1
-            #     # c_b = '%s<%s>' % (issue.closed_by.login, (issue.closed_by.name or issue.closed_by.login))
-            #     c_b = issue.closed_by.login
-
             # milestone
             tmp_milestone = ''
             if issue.milestone:
                 tmp_milestone = issue.milestone.title
             if milestone and not milestone == tmp_milestone:
                 continue
-            # if cnt % 20 == 0:  # check remaining every 20 issues.
-            #     check_remaining()
 
             line = [issue.id,
                     issue.number,
@@ -124,8 +116,72 @@ def get_all_issues(state='all', milestone: str = None,
                     issue.created_at,
                     issue.last_modified,
                     issue.updated_at]
+            issue_list.append(line)
             writer.writerow(line)
     return issue_list
+
+
+def write_html(list_issue, url):
+    html_1 = """
+    <!DOCTYPE html>
+    <html lang="en">
+    <style>
+    table, th, td {
+      border: 1px solid;
+      border-collapse: collapse;
+    }
+    th, td {
+      padding: 5px;
+    }
+    </style>
+    <body>
+    <table>
+        <tr>
+            <th>id</th>
+            <th>title</th>
+        </tr>
+    """
+
+    html_2 = """
+    </table>
+    </body>
+    </html>"""
+
+    html_issue = ''
+    for i in list_issue:
+        str_id = i[1]
+        str_title = i[2]
+        html_issue += """
+            <tr>
+            <td><a href="{2}/{0}">{0}</a></td>
+            <td>{1}</td>
+            </tr>""".format(str_id, str_title, url)
+    html_issues = html_1 + html_issue + html_2
+    return html_issues
+
+
+def send_mail(mail_body, mail_from, mail_to, username, password, mail_host):
+    mail_subject = "Esri Auto Daily Issue Lists"
+    mail_attachment = os.path.join(os.path.dirname(__file__), "issues.csv")
+    mail_attachment_name = "issues.csv"
+
+    mime_msg = MIMEMultipart()
+    mime_msg['From'] = mail_from
+    mime_msg['To'] = mail_to
+    mime_msg['Subject'] = mail_subject
+    mime_msg.attach(MIMEText(mail_body, 'html'))
+
+    with open(mail_attachment, "rb") as attachment:
+        mimefile = MIMEBase('application', 'octet-stream')
+        mimefile.set_payload(attachment.read())
+        encoders.encode_base64(mimefile)
+        mimefile.add_header('Content-Disposition', "attachment; filename= %s" % mail_attachment_name)
+        mime_msg.attach(mimefile)
+        connection = smtplib.SMTP(host=mail_host, port=587)
+        connection.starttls()
+        connection.login(username, password)
+        connection.send_message(mime_msg)
+        connection.quit()
 
 
 if __name__ == '__main__':
@@ -135,17 +191,15 @@ if __name__ == '__main__':
         repos = g.get_user().get_repos()
         for repo in repos:
             if repo.full_name == 'org_name/repo_name':
-                list_numbers = []
-                list_select = []
-
+                issues_url = repo.html_url + '/issues'
                 print('Retrieving issues......')
                 # submitted by user1, and has the label "label1" or "label1"
-                get_all_issues(required_labels=['by-user1'],
-                               labels=['label1', 'label2'],
-                               labels_logic=LOGIC.OR)
+                i_list = get_all_issues(required_labels=['by-user1'],
+                                        labels=['label1', 'label2'],
+                                        labels_logic=LOGIC.OR)
+                html_content = write_html(i_list, issues_url)
+                send_mail(html_content, 'from@domain.com', 'to@domain.com', 'user', 'password', 'mail.domain.com')
 
         print('====Completed!====')
-        input('Press Enter to quit...')
     except Exception as e:
         print("ERROR: ", e)
-        input('Press Enter to quit...')
