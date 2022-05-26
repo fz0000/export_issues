@@ -193,7 +193,7 @@ if __name__ == '__main__':
             if repo.full_name == 'org_name/repo_name':
                 issues_url = repo.html_url + '/issues'
                 print('Retrieving issues......')
-                # submitted by user1, and has the label "label1" or "label1"
+                # submitted by user1, and has the label "label1" or "label2"
                 i_list = get_all_issues(required_labels=['by-user1'],
                                         labels=['label1', 'label2'],
                                         labels_logic=LOGIC.OR)
