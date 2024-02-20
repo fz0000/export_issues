@@ -1,3 +1,7 @@
+"""
+Export issues from GitHub
+"""
+
 # -*- coding: utf-8 -*-
 
 import csv
@@ -20,57 +24,82 @@ if platform.python_version_tuple()[0] == '2':
 
 
 class LOGIC:
+    """
+    logic between labels
+    """
+
     AND = 0
     OR = 1
 
 
 def countdown(sec):
+    """
+    countdown
+    """
+
     for i in range(sec):
         time.sleep(1)
-        print('\r%d seconds left...\t\t' % (sec - i), end='')
+        print(f'\r{sec - i} seconds left...\t\t', end='')
     print('ok')
 
 
 def get_current_time():
+    """
+    get current time
+    """
+
     # todo: Use https://*.github.com to get current server time.
     # You can change the url if you use other server (e.g. GitHub Enterprise)
-    github_time = requests.get('https://api.github.com').headers['Date']
+    github_time = requests.get('https://api.github.com', timeout=30).headers['Date']
     return time.strptime(github_time, '%a, %d %b %Y %H:%M:%S GMT')
 
 
 def check_remaining(cnt=500):
+    """
+    check remaining time
+    """
+
     remain_cnt = g.get_rate_limit().core.remaining
-    print('remain: %d' % remain_cnt)
+    print(f'remain: {remain_cnt}')
     if remain_cnt < cnt:
         reset_time = g.get_rate_limit().core.reset
         cur_time = get_current_time()
-        print('wait until: %s' % reset_time.strftime('%Y-%m-%d %H:%M:%S UTC'))
-        print('current time: %s' % time.strftime('%Y-%m-%d %H:%M:%S UTC', cur_time))
-        wait_time = int(reset_time.timestamp() - time.mktime(cur_time))  # accurate to second is enough
-        print('wait %d seconds until reset...' % wait_time)
+        print(f'wait until: {reset_time.strftime("%Y-%m-%d %H:%M:%S UTC")}')
+        print(f"current time: {time.strftime('%Y-%m-%d %H:%M:%S UTC', cur_time)}")
+        wait_time = int(reset_time.timestamp() - time.mktime(cur_time))  # accurate to second
+        print(f'wait {wait_time} seconds until reset...')
         countdown(wait_time)
 
 
 def check_filter(filter_list: list = None, all_list: list = None, logic: int = LOGIC.AND):
+    """
+    check filter list
+    """
+
     if not filter_list:
         return True  # speed up: always True if filter_list is None
     if logic == LOGIC.AND:
         return set(filter_list) <= set(all_list)
     if logic == LOGIC.OR:
         return [i for i in filter_list if i in all_list] > []
+    return False
 
 
 def get_all_issues(state='all', milestone: str = None,
                    required_labels: list[str] = None,
                    labels: list[str] = None, labels_logic=LOGIC.AND,
                    assignees: list[str] = None, assignees_logic=LOGIC.AND):
+    """
+    get issues
+    """
+
     issue_list = []
     issues = repo.get_issues(state=state)
     with open(os.path.join(os.path.dirname(__file__), "issues.csv"), 'w', newline='', encoding='utf-8') as csv_file:
         writer = csv.writer(csv_file)
         # todo: use friendly col name?
-        writer.writerow(['id', 'number', 'title', 'labels', 'milestone', 'state', 'assignees', 'closed_at',
-                         'created_at', 'last_modified', 'updated_at'])
+        writer.writerow(['id', 'number', 'title', 'labels', 'milestone', 'state', 'assignees',
+                        'closed_at', 'created_at', 'last_modified', 'updated_at'])
         check_remaining()
         cnt = 0
         print('Writing to issues.csv.....')
@@ -126,7 +155,7 @@ def write_html(list_issue, url):
     """
     Create a simple table here as an example. 
     """
-    
+
     html_1 = """
     <!DOCTYPE html>
     <html lang="en">
@@ -166,6 +195,10 @@ def write_html(list_issue, url):
 
 
 def send_mail(mail_body, mail_from, mail_to, username, password, mail_host, mail_port=587):
+    """
+    send mail via smtp
+    """
+
     mail_subject = "Issue Lists"
     mail_attachment = os.path.join(os.path.dirname(__file__), "issues.csv")
     mail_attachment_name = "issues.csv"
@@ -180,7 +213,7 @@ def send_mail(mail_body, mail_from, mail_to, username, password, mail_host, mail
         mimefile = MIMEBase('application', 'octet-stream')
         mimefile.set_payload(attachment.read())
         encoders.encode_base64(mimefile)
-        mimefile.add_header('Content-Disposition', "attachment; filename= %s" % mail_attachment_name)
+        mimefile.add_header('Content-Disposition', f"attachment; filename= {mail_attachment_name}")
         mime_msg.attach(mimefile)
         connection = smtplib.SMTP(host=mail_host, port=mail_port)
         connection.starttls()
@@ -202,7 +235,8 @@ if __name__ == '__main__':
                 i_list = get_all_issues(required_labels=['product1', 'UI'],
                                         labels=['high', 'medium'], labels_logic=LOGIC.OR)
                 html_content = write_html(i_list, issues_url)
-                send_mail(html_content, 'from@domain.com', 'to@domain.com', 'user', 'password', 'mail.domain.com')
+                send_mail(html_content,
+                          'from@domain.com', 'to@domain.com', 'user', 'password', 'mail.domain.com')
 
         print('====Completed!====')
     except Exception as e:
